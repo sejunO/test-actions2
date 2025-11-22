@@ -6,6 +6,7 @@ on:
       - main
 
 jobs:
+
   # 변경된 모듈 감지
   detect-changes:
     runs-on: ubuntu-latest
@@ -36,6 +37,9 @@ jobs:
       matrix:
         module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
 
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -54,16 +58,19 @@ jobs:
 
       # Docker Build & Push
       - name: Build & Push Image
+        id: build
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           MODULE="${{ matrix.module }}"
           ECR_REPO="$REGISTRY/nowayback/encore/$MODULE"
           TAG="${{ github.sha }}"
+
           docker build --platform linux/amd64 -t $ECR_REPO:$TAG -f $MODULE/Dockerfile .
           docker tag $ECR_REPO:$TAG $ECR_REPO:latest
           docker push $ECR_REPO:$TAG
           docker push $ECR_REPO:latest
+
           echo "image=$ECR_REPO:$TAG" >> $GITHUB_OUTPUT
 
   # ECS Deploy
@@ -72,11 +79,7 @@ jobs:
       - detect-changes
       - build-push
     runs-on: ubuntu-latest
-    env:
-      AWS_REGION: ap-northeast-2
-
     if: ${{ needs.detect-changes.outputs.modules != '[]' }}
-
     strategy:
       matrix:
         module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
@@ -92,7 +95,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-northeast-2
 
-      # 기존 Task Definition 불러오기
+      # 현재 Task Definition 다운로드
       - name: Download current task definition
         run: |
           aws ecs describe-task-definition \
@@ -100,10 +103,10 @@ jobs:
             --query taskDefinition \
             --output json > task-definition.json
 
-          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities)' \
+          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredBy, .registeredAt)' \
             task-definition.json > task-def.json
 
-      # 이미지 & 환경변수 갱신
+      # Task Definition 업데이트 (이미지 + 환경 변수)
       - name: Render updated task definition
         id: render
         uses: aws-actions/amazon-ecs-render-task-definition@v1
