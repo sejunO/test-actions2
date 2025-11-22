@@ -117,24 +117,50 @@ jobs:
             .enableFaultInjection
           )' task-definition.json > task-def.json
 
-      # Task Definition 업데이트 (Secrets Manager valueFrom 사용)
-      - name: Render updated task definition
-        id: render
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: task-def.json
-          container-name: ${{ matrix.module }}-service
-          image: ${{ needs.build-push.outputs.image }}
-          secrets: |
-            SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}
-            SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}
-            SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
-            SPRING_PROFILES_ACTIVE=prod
+      # Task Definition에 secrets 추가 (jq로 직접 수정)
+      - name: Update task definition with secrets
+        run: |
+          jq --arg image "${{ needs.build-push.outputs.image }}" \
+             --arg db_url_arn "${{ secrets.SPRING_DATASOURCE_URL_ARN }}" \
+             --arg db_username_arn "${{ secrets.SPRING_DATASOURCE_USERNAME_ARN }}" \
+             --arg db_password_arn "${{ secrets.SPRING_DATASOURCE_PASSWORD_ARN }}" \
+          '.containerDefinitions[0].image = $image |
+           .containerDefinitions[0].secrets = [
+             {
+               "name": "SPRING_DATASOURCE_URL",
+               "valueFrom": $db_url_arn
+             },
+             {
+               "name": "SPRING_DATASOURCE_USERNAME",
+               "valueFrom": $db_username_arn
+             },
+             {
+               "name": "SPRING_DATASOURCE_PASSWORD",
+               "valueFrom": $db_password_arn
+             }
+           ] |
+           .containerDefinitions[0].environment = [
+             {
+               "name": "SPRING_PROFILES_ACTIVE",
+               "value": "prod"
+             }
+           ]' task-def.json > updated-task-def.json
+
+      # Task Definition 등록
+      - name: Register new task definition
+        id: register-task-def
+        run: |
+          TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://updated-task-def.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          echo "task-definition-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
 
       # ECS 배포
       - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.render.outputs.task-definition }}
-          service: ${{ matrix.module }}-service
-          cluster: nowayback-encore-cluster
+        run: |
+          aws ecs update-service \
+            --cluster nowayback-encore-cluster \
+            --service ${{ matrix.module }}-service \
+            --task-definition ${{ steps.register-task-def.outputs.task-definition-arn }} \
+            --force-new-deployment
