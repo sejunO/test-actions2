@@ -117,7 +117,7 @@ jobs:
             .enableFaultInjection
           )' task-definition.json > task-def.json
 
-      # Task Definition 업데이트 (Secrets Manager 적용)
+      # Task Definition 업데이트 (Secrets Manager valueFrom 사용)
       - name: Render updated task definition
         id: render
         uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -125,16 +125,11 @@ jobs:
           task-definition: task-def.json
           container-name: ${{ matrix.module }}-service
           image: ${{ needs.build-push.outputs.image }}
-          # ECS secrets 사용 (valueFrom)
           secrets: |
-            - name: SPRING_DATASOURCE_URL
-              valueFrom: ${{ secrets.SPRING_DATASOURCE_URL }}
-            - name: SPRING_DATASOURCE_USERNAME
-              valueFrom: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
-            - name: SPRING_DATASOURCE_PASSWORD
-              valueFrom: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
-            - name: SPRING_PROFILES_ACTIVE
-              value: prod
+            SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}
+            SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}
+            SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+            SPRING_PROFILES_ACTIVE=prod
 
       # ECS 배포
       - name: Deploy to ECS
