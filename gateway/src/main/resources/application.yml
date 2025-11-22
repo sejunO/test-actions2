@@ -52,7 +52,7 @@ eureka:
     fetch-registry: true
     register-with-eureka: true
     service-url:
-      defaultZone: http://discovery-service.local:8761/eureka/
+      defaultZone: http://encore-discovery-alb-1894480317.ap-northeast-2.elb.amazonaws.com/eureka/
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${random.value}

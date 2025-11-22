@@ -16,4 +16,4 @@ eureka:
     registerWithEureka: true
     fetchRegistry: true
     serviceUrl:
-      defaultZone: http://discovery-service.local:8761/eureka/
+      defaultZone: http://encore-discovery-alb-1894480317.ap-northeast-2.elb.amazonaws.com/eureka/
