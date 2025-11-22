@@ -23,7 +23,8 @@ jobs:
         run: |
           changed_files=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
           changed_modules=$(echo "$changed_files" | cut -d/ -f1 | sort -u)
-          modules=$(echo "$changed_modules" | grep -E "^(discovery|gateway|user|project)$" \
+          modules=$(echo "$changed_modules" \
+            | grep -E "^(discovery|gateway|user|project)$" \
             | jq -R -s -c 'split("\n") | map(select(length>0))')
           echo "modules=$modules" >> $GITHUB_OUTPUT
 
@@ -80,6 +81,7 @@ jobs:
       - build-push
     runs-on: ubuntu-latest
     if: ${{ needs.detect-changes.outputs.modules != '[]' }}
+
     strategy:
       matrix:
         module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
@@ -103,10 +105,19 @@ jobs:
             --query taskDefinition \
             --output json > task-definition.json
 
-          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredBy, .registeredAt)' \
-            task-definition.json > task-def.json
+          jq 'del(
+            .taskDefinitionArn,
+            .revision,
+            .status,
+            .requiresAttributes,
+            .placementConstraints,
+            .compatibilities,
+            .registeredBy,
+            .registeredAt,
+            .enableFaultInjection
+          )' task-definition.json > task-def.json
 
-      # Task Definition 업데이트 (이미지 + 환경 변수)
+      # Task Definition 업데이트
       - name: Render updated task definition
         id: render
         uses: aws-actions/amazon-ecs-render-task-definition@v1
