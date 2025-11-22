@@ -13,7 +13,7 @@ eureka:
     register-with-eureka: false
     fetch-registry: false
     service-url:
-      defaultZone: http://eureka-server.local:8761/eureka/
+      defaultZone: http://discovery-service.local:8761/eureka/
   server:
     enable-self-preservation: true
     renewal-percent-threshold: 0.85
