@@ -1,4 +1,4 @@
-name: ECR Push Only
+name: Build & Deploy to ECS
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
           changed_modules=$(echo "$changed_files" | cut -d/ -f1 | sort -u)
 
           modules=$(echo "$changed_modules" \
-            | grep -E "^(user|project)$" \
+            | grep -E "^(discovery|gateway|user|project)$" \
             | jq -R -s -c 'split("\n") | map(select(length>0))')
 
           echo "modules=$modules" >> $GITHUB_OUTPUT
@@ -41,6 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # AWS 인증 수행
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -48,10 +49,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-northeast-2
 
+      # ECR 로그인 수행
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      # Build & Push
       - name: Build & Push Docker image
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -75,3 +78,20 @@ jobs:
           docker push $ECR_REPO:latest
 
           echo "Image pushed: $ECR_REPO:$TAG"
+
+      # Task Definition 렌더링
+      - name: Render new task definition
+        id: task-df
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ecs/task-definitions/${{ matrix.module }}.json
+          container-name: ${{ matrix.module }}-service
+          image: ${{ steps.login-ecr.outputs.registry }}/nowayback/encore/${{ matrix.module }}:${{ github.sha }}
+
+      # ECS 배포
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ matrix.module }}-service
+          cluster: nowayback-encore-cluster
