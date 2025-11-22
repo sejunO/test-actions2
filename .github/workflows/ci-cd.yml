@@ -22,13 +22,16 @@ jobs:
         run: |
           changed_files=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
           changed_modules=$(echo "$changed_files" | cut -d/ -f1 | sort -u)
-          modules=$(echo "$changed_modules" | grep -E "^(discovery|gateway|user|project)$" | jq -R -s -c 'split("\n") | map(select(length>0))')
+          modules=$(echo "$changed_modules" | grep -E "^(discovery|gateway|user|project)$" \
+            | jq -R -s -c 'split("\n") | map(select(length>0))')
           echo "modules=$modules" >> $GITHUB_OUTPUT
 
   # Docker Build & Push
   build-push:
     needs: detect-changes
     runs-on: ubuntu-latest
+
+    # 모듈이 없으면 job 전체 건너뜀
     if: ${{ needs.detect-changes.outputs.modules != '[]' }}
 
     strategy:
@@ -53,7 +56,6 @@ jobs:
 
       # Docker Build & Push
       - name: Build & Push Image
-        id: pushimage
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
@@ -66,18 +68,17 @@ jobs:
           docker push $ECR_REPO:latest
           echo "image=$ECR_REPO:$TAG" >> $GITHUB_OUTPUT
 
-  # ECS 배포
+  # ECS Deploy
   deploy:
     needs: build-push
     runs-on: ubuntu-latest
     env:
       AWS_REGION: ap-northeast-2
+    if: ${{ needs.detect-changes.outputs.modules != '[]' }}
 
     strategy:
       matrix:
         module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
-
-    if: ${{ needs.detect-changes.outputs.modules != '[]' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -101,14 +102,14 @@ jobs:
           jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities)' \
             task-definition.json > task-def.json
 
-      # Task Definition 업데이트
+      # TaskDefinition 이미지 & 환경변수 업데이트
       - name: Render updated task definition
         id: render
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: task-def.json
           container-name: ${{ matrix.module }}-service
-          image: ${{ steps.pushimage.outputs.image }}
+          image: ${{ needs.build-push.outputs.image }}
           environment-variables: |
             SPRING_PROFILES_ACTIVE=prod
             SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}
