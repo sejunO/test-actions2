@@ -117,34 +117,34 @@ jobs:
             .enableFaultInjection
           )' task-definition.json > task-def.json
 
-      # Task Definition에 secrets 추가 (jq로 직접 수정)
-      - name: Update task definition with secrets
+      # Task Definition에 환경변수 직접 추가
+      - name: Update task definition with environment variables
         run: |
           jq --arg image "${{ needs.build-push.outputs.image }}" \
-             --arg db_url_arn "${{ secrets.SPRING_DATASOURCE_URL_ARN }}" \
-             --arg db_username_arn "${{ secrets.SPRING_DATASOURCE_USERNAME_ARN }}" \
-             --arg db_password_arn "${{ secrets.SPRING_DATASOURCE_PASSWORD_ARN }}" \
+             --arg db_url "${{ secrets.SPRING_DATASOURCE_URL }}" \
+             --arg db_username "${{ secrets.SPRING_DATASOURCE_USERNAME }}" \
+             --arg db_password "${{ secrets.SPRING_DATASOURCE_PASSWORD }}" \
           '.containerDefinitions[0].image = $image |
-           .containerDefinitions[0].secrets = [
+           .containerDefinitions[0].environment = [
              {
                "name": "SPRING_DATASOURCE_URL",
-               "valueFrom": $db_url_arn
+               "value": $db_url
              },
              {
                "name": "SPRING_DATASOURCE_USERNAME",
-               "valueFrom": $db_username_arn
+               "value": $db_username
              },
              {
                "name": "SPRING_DATASOURCE_PASSWORD",
-               "valueFrom": $db_password_arn
-             }
-           ] |
-           .containerDefinitions[0].environment = [
+               "value": $db_password
+             },
              {
                "name": "SPRING_PROFILES_ACTIVE",
                "value": "prod"
              }
-           ]' task-def.json > updated-task-def.json
+           ] |
+           del(.containerDefinitions[0].secrets)' \
+          task-def.json > updated-task-def.json
 
       # Task Definition 등록
       - name: Register new task definition
