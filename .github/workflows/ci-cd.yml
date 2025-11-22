@@ -138,4 +138,3 @@ jobs:
           task-definition: ${{ steps.render.outputs.task-definition }}
           service: ${{ matrix.module }}-service
           cluster: nowayback-encore-cluster
-          wait-for-service-stability: true
