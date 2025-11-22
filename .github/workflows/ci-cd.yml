@@ -1,0 +1,77 @@
+name: ECR Push Only
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.mods.outputs.modules }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed service modules
+        id: mods
+        run: |
+          changed_files=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          changed_modules=$(echo "$changed_files" | cut -d/ -f1 | sort -u)
+
+          modules=$(echo "$changed_modules" \
+            | grep -E "^(user|project)$" \
+            | jq -R -s -c 'split("\n") | map(select(length>0))')
+
+          echo "modules=$modules" >> $GITHUB_OUTPUT
+
+
+  build-push:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: ${{ needs.detect-changes.outputs.modules != '[]' }}
+
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & Push Docker image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          MODULE="${{ matrix.module }}"
+          ECR_REPO="$REGISTRY/nowayback/encore/$MODULE"
+          TAG="${{ github.sha }}"
+
+          echo "Building image for '$MODULE'..."
+          echo "Repository: $ECR_REPO"
+          echo "Tag: $TAG"
+
+          docker build \
+            --platform linux/amd64 \
+            -t $ECR_REPO:$TAG \
+            -f $MODULE/Dockerfile .
+
+          docker tag $ECR_REPO:$TAG $ECR_REPO:latest
+
+          docker push $ECR_REPO:$TAG
+          docker push $ECR_REPO:latest
+
+          echo "Image pushed: $ECR_REPO:$TAG"
