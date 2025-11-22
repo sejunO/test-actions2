@@ -6,6 +6,7 @@ on:
       - main
 
 jobs:
+  # 변경된 모듈 감지
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -16,20 +17,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 변경된 모듈 감지
       - name: Detect changed modules
         id: mods
         run: |
           changed_files=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
           changed_modules=$(echo "$changed_files" | cut -d/ -f1 | sort -u)
-
-          modules=$(echo "$changed_modules" \
-            | grep -E "^(discovery|gateway|user|project)$" \
-            | jq -R -s -c 'split("\n") | map(select(length>0))')
-
+          modules=$(echo "$changed_modules" | grep -E "^(discovery|gateway|user|project)$" | jq -R -s -c 'split("\n") | map(select(length>0))')
           echo "modules=$modules" >> $GITHUB_OUTPUT
 
-
+  # Docker Build & Push
   build-push:
     needs: detect-changes
     runs-on: ubuntu-latest
@@ -38,9 +34,6 @@ jobs:
     strategy:
       matrix:
         module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
-
-    outputs:
-      image: ${{ steps.push-image.outputs.image }}
 
     steps:
       - uses: actions/checkout@v4
@@ -60,41 +53,44 @@ jobs:
 
       # Docker Build & Push
       - name: Build & Push Image
-        id: push-image
+        id: pushimage
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           MODULE="${{ matrix.module }}"
           ECR_REPO="$REGISTRY/nowayback/encore/$MODULE"
           TAG="${{ github.sha }}"
-
-          docker build --platform linux/amd64 \
-            -t $ECR_REPO:$TAG \
-            -f $MODULE/Dockerfile .
-
+          docker build --platform linux/amd64 -t $ECR_REPO:$TAG -f $MODULE/Dockerfile .
           docker tag $ECR_REPO:$TAG $ECR_REPO:latest
-
           docker push $ECR_REPO:$TAG
           docker push $ECR_REPO:latest
-
           echo "image=$ECR_REPO:$TAG" >> $GITHUB_OUTPUT
 
-
+  # ECS 배포
   deploy:
-    needs:
-      - detect-changes
-      - build-push
+    needs: build-push
     runs-on: ubuntu-latest
-    if: ${{ needs.detect-changes.outputs.modules != '[]' }}
+    env:
+      AWS_REGION: ap-northeast-2
 
     strategy:
       matrix:
         module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
 
+    if: ${{ needs.detect-changes.outputs.modules != '[]' }}
+
     steps:
       - uses: actions/checkout@v4
 
-      # 기존 Task Definition 가져오기
+      # AWS 인증
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      # 현재 Task Definition 다운로드
       - name: Download current task definition
         run: |
           aws ecs describe-task-definition \
@@ -105,14 +101,14 @@ jobs:
           jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities)' \
             task-definition.json > task-def.json
 
-      # Task Definition 업데이트 (이미지 + 환경변수)
+      # Task Definition 업데이트
       - name: Render updated task definition
         id: render
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: task-def.json
           container-name: ${{ matrix.module }}-service
-          image: ${{ needs.build-push.outputs.image }}
+          image: ${{ steps.pushimage.outputs.image }}
           environment-variables: |
             SPRING_PROFILES_ACTIVE=prod
             SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}
