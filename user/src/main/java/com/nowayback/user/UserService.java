@@ -13,6 +13,7 @@ public class UserService {
     public User create(String name) {
         User user = userRepository.save(User.create(name));
         eventPublisher.publish(UserDto.from(user));
+
         return user;
     }
 }
