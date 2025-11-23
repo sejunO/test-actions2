@@ -6,6 +6,9 @@ spring:
     name: gateway
 
   cloud:
+    inetutils:
+      preferred-networks:
+        - 10.0
     gateway:
       server:
         webflux:
