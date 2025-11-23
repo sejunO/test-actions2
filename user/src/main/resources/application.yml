@@ -8,6 +8,11 @@ spring:
     inetutils:
       preferred-networks:
         - 10.0
+    aws:
+      region:
+        static: ap-northeast-2
+      credentials:
+        instance-profile: true
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
@@ -16,7 +21,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: update
     properties:
       hibernate:
         show_sql: true
