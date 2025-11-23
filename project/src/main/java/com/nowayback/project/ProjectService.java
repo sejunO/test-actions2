@@ -1,7 +1,5 @@
-package com.nowayback.project.service;
+package com.nowayback.project;
 
-import com.nowayback.project.entity.Project;
-import com.nowayback.project.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

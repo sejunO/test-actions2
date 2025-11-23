@@ -8,6 +8,9 @@ spring:
     inetutils:
       preferred-networks:
         - 10.0
+    aws:
+      region:
+        static: ap-northeast-2
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}

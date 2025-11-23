@@ -1,6 +1,5 @@
-package com.nowayback.project.repository;
+package com.nowayback.project;
 
-import com.nowayback.project.entity.Project;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ProjectRepository extends JpaRepository<Project, Long> {

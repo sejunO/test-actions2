@@ -1,7 +1,5 @@
-package com.nowayback.project.controller;
+package com.nowayback.project;
 
-import com.nowayback.project.entity.Project;
-import com.nowayback.project.service.ProjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

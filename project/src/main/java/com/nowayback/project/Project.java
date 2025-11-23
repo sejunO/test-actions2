@@ -1,4 +1,4 @@
-package com.nowayback.project.entity;
+package com.nowayback.project;
 
 import jakarta.persistence.*;
 import lombok.AccessLevel;
