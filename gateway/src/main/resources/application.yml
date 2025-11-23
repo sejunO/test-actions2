@@ -55,7 +55,7 @@ eureka:
       defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
   instance:
     prefer-ip-address: true
-    instance-id: ${spring.application.name}:${random.value}
+    instance-id: ${spring.cloud.client.ip-address}:${spring.application.name}:${server.port}
 
 management:
   endpoints:
