@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: project-service
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 10.0
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
@@ -23,3 +27,6 @@ eureka:
     fetchRegistry: true
     serviceUrl:
       defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.cloud.client.ip-address}:${spring.application.name}:${server.port}
