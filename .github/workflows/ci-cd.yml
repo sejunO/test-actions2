@@ -38,9 +38,6 @@ jobs:
       matrix:
         module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
 
-    outputs:
-      image: ${{ steps.build.outputs.image }}
-
     steps:
       - uses: actions/checkout@v4
 
@@ -59,7 +56,6 @@ jobs:
 
       # Docker Build & Push
       - name: Build & Push Image
-        id: build
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
@@ -71,8 +67,6 @@ jobs:
           docker tag $ECR_REPO:$TAG $ECR_REPO:latest
           docker push $ECR_REPO:$TAG
           docker push $ECR_REPO:latest
-
-          echo "image=$ECR_REPO:$TAG" >> $GITHUB_OUTPUT
 
   # ECS Deploy
   deploy:
@@ -97,6 +91,21 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-northeast-2
 
+      # ECR 로그인 (이미지 경로 계산을 위해)
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 현재 모듈의 이미지 경로 계산
+      - name: Set image path
+        id: image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          MODULE="${{ matrix.module }}"
+          IMAGE="$REGISTRY/nowayback/encore/$MODULE:${{ github.sha }}"
+          echo "path=$IMAGE" >> $GITHUB_OUTPUT
+
       # 현재 Task Definition 다운로드
       - name: Download current task definition
         run: |
@@ -120,10 +129,11 @@ jobs:
       # Task Definition에 환경변수 직접 추가
       - name: Update task definition with environment variables
         run: |
-          jq --arg image "${{ needs.build-push.outputs.image }}" \
+          jq --arg image "${{ steps.image.outputs.path }}" \
              --arg db_url "${{ secrets.SPRING_DATASOURCE_URL }}" \
              --arg db_username "${{ secrets.SPRING_DATASOURCE_USERNAME }}" \
              --arg db_password "${{ secrets.SPRING_DATASOURCE_PASSWORD }}" \
+             --arg eureka "${{ secrets.EUREKA_CLIENT_SERVICEURL_DEFAULTZONE }}" \
           '.containerDefinitions[0].image = $image |
            .containerDefinitions[0].environment = [
              {
@@ -137,6 +147,10 @@ jobs:
              {
                "name": "SPRING_DATASOURCE_PASSWORD",
                "value": $db_password
+             },
+            {
+               "name": "EUREKA_CLIENT_SERVICEURL_DEFAULTZONE",
+               "value": $eureka
              },
              {
                "name": "SPRING_PROFILES_ACTIVE",
